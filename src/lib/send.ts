@@ -6,6 +6,7 @@ import {
   sign
 } from '@alephium/web3'
 import { validateAlephiumAddress } from './validation'
+import { InvalidAmountError, TransactionError } from './errors'
 
 const TESTNET_NODE_URL = 'https://node.testnet.alephium.org'
 
@@ -23,7 +24,9 @@ export interface Wallet {
  * @param destinationAddress - The recipient's Alephium address
  * @param amount - The amount to send in raw units (1 ALPH = 10^18 units)
  * @returns The transaction hash (txId)
- * @throws Error if the transaction fails to build or submit
+ * @throws InvalidAmountError if the amount is zero or negative
+ * @throws InvalidAddressError if the destination address is invalid
+ * @throws TransactionError if the transaction fails to build, sign, or submit
  */
 export async function sendAlph(
   senderWallet: Wallet,
@@ -32,41 +35,72 @@ export async function sendAlph(
 ): Promise<string> {
   // Validate inputs before making any network calls
   if (amount <= 0n) {
-    throw new Error('Amount must be greater than zero')
+    throw new InvalidAmountError('Amount must be greater than zero')
   }
 
   validateAlephiumAddress(destinationAddress, 'destination address')
 
   // Derive public key and address from the private key
-  const publicKey = publicKeyFromPrivateKey(senderWallet.privateKey)
-  const senderAddress = addressFromPublicKey(publicKey)
+  let publicKey: string
+  let senderAddress: string
+  try {
+    publicKey = publicKeyFromPrivateKey(senderWallet.privateKey)
+    senderAddress = addressFromPublicKey(publicKey)
+  } catch (error) {
+    throw new TransactionError(
+      'Failed to derive address from private key',
+      error instanceof Error ? error : undefined
+    )
+  }
 
   // Create node provider and transaction builder for testnet
   const nodeProvider = new NodeProvider(TESTNET_NODE_URL)
   const txBuilder = TransactionBuilder.from(nodeProvider)
 
   // Build the unsigned transfer transaction
-  const buildResult = await txBuilder.buildTransferTx(
-    {
-      signerAddress: senderAddress,
-      destinations: [
-        {
-          address: destinationAddress,
-          attoAlphAmount: amount.toString()
-        }
-      ]
-    },
-    publicKey
-  )
+  let buildResult: { txId: string; unsignedTx: string }
+  try {
+    buildResult = await txBuilder.buildTransferTx(
+      {
+        signerAddress: senderAddress,
+        destinations: [
+          {
+            address: destinationAddress,
+            attoAlphAmount: amount.toString()
+          }
+        ]
+      },
+      publicKey
+    )
+  } catch (error) {
+    throw new TransactionError(
+      'Failed to build transaction',
+      error instanceof Error ? error : undefined
+    )
+  }
 
   // Sign the transaction hash with the sender's private key
-  const signature = sign(buildResult.txId, senderWallet.privateKey)
+  let signature: string
+  try {
+    signature = sign(buildResult.txId, senderWallet.privateKey)
+  } catch (error) {
+    throw new TransactionError(
+      'Failed to sign transaction',
+      error instanceof Error ? error : undefined
+    )
+  }
 
   // Submit the signed transaction to the network
-  const submitResult = await nodeProvider.transactions.postTransactionsSubmit({
-    unsignedTx: buildResult.unsignedTx,
-    signature
-  })
-
-  return submitResult.txId
+  try {
+    const submitResult = await nodeProvider.transactions.postTransactionsSubmit({
+      unsignedTx: buildResult.unsignedTx,
+      signature
+    })
+    return submitResult.txId
+  } catch (error) {
+    throw new TransactionError(
+      'Failed to submit transaction',
+      error instanceof Error ? error : undefined
+    )
+  }
 }

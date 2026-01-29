@@ -1,4 +1,5 @@
 import { sendAlph } from '../src/lib/send'
+import { InvalidAddressError, InvalidAmountError, TransactionError } from '../src/lib/errors'
 import {
   NodeProvider,
   TransactionBuilder,
@@ -173,10 +174,9 @@ describe('sendAlph', () => {
   })
 
   describe('invalid private key', () => {
-    it('should throw an error when publicKeyFromPrivateKey fails', async () => {
-      const errorMessage = 'Invalid private key format'
+    it('should throw TransactionError when publicKeyFromPrivateKey fails', async () => {
       mockPublicKeyFromPrivateKey.mockImplementation(() => {
-        throw new Error(errorMessage)
+        throw new Error('Invalid private key format')
       })
 
       await expect(
@@ -185,18 +185,51 @@ describe('sendAlph', () => {
           mockDestinationAddress,
           mockAmount
         )
-      ).rejects.toThrow(errorMessage)
+      ).rejects.toThrow(TransactionError)
+      await expect(
+        sendAlph(
+          { privateKey: 'invalid-key' },
+          mockDestinationAddress,
+          mockAmount
+        )
+      ).rejects.toThrow('Failed to derive address from private key')
 
       // Verify no network calls were made
       expect(mockBuildTransferTx).not.toHaveBeenCalled()
       expect(mockPostTransactionsSubmit).not.toHaveBeenCalled()
     })
+
+    it('should include original error as cause in TransactionError', async () => {
+      const originalError = new Error('Invalid private key format')
+      mockPublicKeyFromPrivateKey.mockImplementation(() => {
+        throw originalError
+      })
+
+      try {
+        await sendAlph(
+          { privateKey: 'invalid-key' },
+          mockDestinationAddress,
+          mockAmount
+        )
+        fail('Expected TransactionError to be thrown')
+      } catch (error) {
+        expect(error).toBeInstanceOf(TransactionError)
+        expect((error as TransactionError).cause).toBe(originalError)
+      }
+    })
   })
 
   describe('invalid destination address format', () => {
-    it('should throw an error for invalid address format before network calls', async () => {
+    it('should throw InvalidAddressError for invalid address format before network calls', async () => {
       mockIsValidAddress.mockReturnValue(false)
 
+      await expect(
+        sendAlph(
+          { privateKey: mockPrivateKey },
+          'invalid-address',
+          mockAmount
+        )
+      ).rejects.toThrow(InvalidAddressError)
       await expect(
         sendAlph(
           { privateKey: mockPrivateKey },
@@ -212,7 +245,14 @@ describe('sendAlph', () => {
       expect(mockPostTransactionsSubmit).not.toHaveBeenCalled()
     })
 
-    it('should throw an error for empty destination address', async () => {
+    it('should throw InvalidAddressError for empty destination address', async () => {
+      await expect(
+        sendAlph(
+          { privateKey: mockPrivateKey },
+          '',
+          mockAmount
+        )
+      ).rejects.toThrow(InvalidAddressError)
       await expect(
         sendAlph(
           { privateKey: mockPrivateKey },
@@ -225,7 +265,14 @@ describe('sendAlph', () => {
       expect(MockedNodeProvider).not.toHaveBeenCalled()
     })
 
-    it('should throw an error for destination address with leading whitespace', async () => {
+    it('should throw InvalidAddressError for destination address with leading whitespace', async () => {
+      await expect(
+        sendAlph(
+          { privateKey: mockPrivateKey },
+          '  ' + mockDestinationAddress,
+          mockAmount
+        )
+      ).rejects.toThrow(InvalidAddressError)
       await expect(
         sendAlph(
           { privateKey: mockPrivateKey },
@@ -238,7 +285,14 @@ describe('sendAlph', () => {
       expect(MockedNodeProvider).not.toHaveBeenCalled()
     })
 
-    it('should throw an error for destination address with trailing whitespace', async () => {
+    it('should throw InvalidAddressError for destination address with trailing whitespace', async () => {
+      await expect(
+        sendAlph(
+          { privateKey: mockPrivateKey },
+          mockDestinationAddress + '  ',
+          mockAmount
+        )
+      ).rejects.toThrow(InvalidAddressError)
       await expect(
         sendAlph(
           { privateKey: mockPrivateKey },
@@ -252,10 +306,9 @@ describe('sendAlph', () => {
     })
   })
 
-  describe('network errors', () => {
-    it('should throw an error when buildTransferTx fails', async () => {
-      const errorMessage = 'Failed to build transaction'
-      mockBuildTransferTx.mockRejectedValue(new Error(errorMessage))
+  describe('transaction errors', () => {
+    it('should throw TransactionError when buildTransferTx fails', async () => {
+      mockBuildTransferTx.mockRejectedValue(new Error('Insufficient funds'))
 
       await expect(
         sendAlph(
@@ -263,14 +316,22 @@ describe('sendAlph', () => {
           mockDestinationAddress,
           mockAmount
         )
-      ).rejects.toThrow(errorMessage)
+      ).rejects.toThrow(TransactionError)
+      await expect(
+        sendAlph(
+          { privateKey: mockPrivateKey },
+          mockDestinationAddress,
+          mockAmount
+        )
+      ).rejects.toThrow('Failed to build transaction')
 
       expect(mockPostTransactionsSubmit).not.toHaveBeenCalled()
     })
 
-    it('should throw an error when transaction submission fails', async () => {
-      const errorMessage = 'Network error during submission'
-      mockPostTransactionsSubmit.mockRejectedValue(new Error(errorMessage))
+    it('should throw TransactionError when signing fails', async () => {
+      mockSign.mockImplementation(() => {
+        throw new Error('Signing failed')
+      })
 
       await expect(
         sendAlph(
@@ -278,12 +339,47 @@ describe('sendAlph', () => {
           mockDestinationAddress,
           mockAmount
         )
-      ).rejects.toThrow(errorMessage)
+      ).rejects.toThrow(TransactionError)
+      await expect(
+        sendAlph(
+          { privateKey: mockPrivateKey },
+          mockDestinationAddress,
+          mockAmount
+        )
+      ).rejects.toThrow('Failed to sign transaction')
+
+      expect(mockPostTransactionsSubmit).not.toHaveBeenCalled()
+    })
+
+    it('should throw TransactionError when transaction submission fails', async () => {
+      mockPostTransactionsSubmit.mockRejectedValue(new Error('Network error'))
+
+      await expect(
+        sendAlph(
+          { privateKey: mockPrivateKey },
+          mockDestinationAddress,
+          mockAmount
+        )
+      ).rejects.toThrow(TransactionError)
+      await expect(
+        sendAlph(
+          { privateKey: mockPrivateKey },
+          mockDestinationAddress,
+          mockAmount
+        )
+      ).rejects.toThrow('Failed to submit transaction')
     })
   })
 
   describe('invalid amount', () => {
-    it('should throw an error for zero amount before making network calls', async () => {
+    it('should throw InvalidAmountError for zero amount before making network calls', async () => {
+      await expect(
+        sendAlph(
+          { privateKey: mockPrivateKey },
+          mockDestinationAddress,
+          BigInt(0)
+        )
+      ).rejects.toThrow(InvalidAmountError)
       await expect(
         sendAlph(
           { privateKey: mockPrivateKey },
@@ -303,7 +399,14 @@ describe('sendAlph', () => {
       expect(mockPostTransactionsSubmit).not.toHaveBeenCalled()
     })
 
-    it('should throw an error for negative amount before making network calls', async () => {
+    it('should throw InvalidAmountError for negative amount before making network calls', async () => {
+      await expect(
+        sendAlph(
+          { privateKey: mockPrivateKey },
+          mockDestinationAddress,
+          BigInt(-100)
+        )
+      ).rejects.toThrow(InvalidAmountError)
       await expect(
         sendAlph(
           { privateKey: mockPrivateKey },

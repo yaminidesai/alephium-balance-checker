@@ -1,4 +1,4 @@
-import { getAlphBalance } from '../lib'
+import { getAlphBalance, InvalidAddressError, NetworkError } from '../lib'
 import { ONE_ALPH } from '@alephium/web3'
 
 async function main() {
@@ -14,7 +14,13 @@ async function main() {
     const balanceAlph = Number(balanceRaw) / Number(ONE_ALPH)
     console.log(`${balanceAlph} ALPH`)
   } catch (error) {
-    console.error('Error fetching balance:', (error as Error).message)
+    if (error instanceof InvalidAddressError) {
+      console.error(`Invalid address: ${error.message}`)
+    } else if (error instanceof NetworkError) {
+      console.error(`Network error: ${error.message}`)
+    } else {
+      console.error(`Unexpected error: ${(error as Error).message}`)
+    }
     process.exit(1)
   }
 }

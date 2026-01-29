@@ -17,7 +17,12 @@
  * Note: This CLI uses the Alephium TESTNET. Do not use mainnet private keys.
  */
 
-import { sendAlph } from '../lib'
+import {
+  sendAlph,
+  InvalidAddressError,
+  InvalidAmountError,
+  TransactionError
+} from '../lib'
 import { ONE_ALPH } from '@alephium/web3'
 
 async function main() {
@@ -59,8 +64,15 @@ async function main() {
     console.log(`Transaction hash: ${txId}`)
     console.log(`View on explorer: https://testnet.alephium.org/transactions/${txId}`)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error('Error sending ALPH:', message)
+    if (error instanceof InvalidAddressError) {
+      console.error(`Invalid address: ${error.message}`)
+    } else if (error instanceof InvalidAmountError) {
+      console.error(`Invalid amount: ${error.message}`)
+    } else if (error instanceof TransactionError) {
+      console.error(`Transaction failed: ${error.message}`)
+    } else {
+      console.error(`Unexpected error: ${(error as Error).message}`)
+    }
     process.exit(1)
   }
 }

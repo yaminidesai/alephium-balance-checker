@@ -1,4 +1,5 @@
 import { getAlphBalance } from '../src/lib/balance'
+import { InvalidAddressError, NetworkError } from '../src/lib/errors'
 import { NodeProvider, isValidAddress } from '@alephium/web3'
 
 jest.mock('@alephium/web3', () => ({
@@ -50,9 +51,10 @@ describe('getAlphBalance', () => {
   })
 
   describe('invalid address format', () => {
-    it('should throw an error for an invalid address format', async () => {
+    it('should throw InvalidAddressError for an invalid address format', async () => {
       mockIsValidAddress.mockReturnValue(false)
 
+      await expect(getAlphBalance('invalid-address')).rejects.toThrow(InvalidAddressError)
       await expect(getAlphBalance('invalid-address')).rejects.toThrow(
         "Invalid address: 'invalid-address' is not a valid Alephium address"
       )
@@ -62,7 +64,8 @@ describe('getAlphBalance', () => {
       expect(mockGetBalance).not.toHaveBeenCalled()
     })
 
-    it('should throw an error for empty address', async () => {
+    it('should throw InvalidAddressError for empty address', async () => {
+      await expect(getAlphBalance('')).rejects.toThrow(InvalidAddressError)
       await expect(getAlphBalance('')).rejects.toThrow(
         'Invalid address: address must be a non-empty string'
       )
@@ -70,7 +73,8 @@ describe('getAlphBalance', () => {
       expect(MockedNodeProvider).not.toHaveBeenCalled()
     })
 
-    it('should throw an error for address with whitespace', async () => {
+    it('should throw InvalidAddressError for address with leading whitespace', async () => {
+      await expect(getAlphBalance('  ' + validAddress)).rejects.toThrow(InvalidAddressError)
       await expect(getAlphBalance('  ' + validAddress)).rejects.toThrow(
         'Invalid address: address contains leading or trailing whitespace'
       )
@@ -78,7 +82,8 @@ describe('getAlphBalance', () => {
       expect(MockedNodeProvider).not.toHaveBeenCalled()
     })
 
-    it('should throw an error for address with trailing whitespace', async () => {
+    it('should throw InvalidAddressError for address with trailing whitespace', async () => {
+      await expect(getAlphBalance(validAddress + '  ')).rejects.toThrow(InvalidAddressError)
       await expect(getAlphBalance(validAddress + '  ')).rejects.toThrow(
         'Invalid address: address contains leading or trailing whitespace'
       )
@@ -88,11 +93,26 @@ describe('getAlphBalance', () => {
   })
 
   describe('network errors', () => {
-    it('should propagate network errors', async () => {
-      const mockError = new Error('Network error')
-      mockGetBalance.mockRejectedValue(mockError)
+    it('should throw NetworkError when balance fetch fails', async () => {
+      mockGetBalance.mockRejectedValue(new Error('Connection refused'))
 
-      await expect(getAlphBalance(validAddress)).rejects.toThrow('Network error')
+      await expect(getAlphBalance(validAddress)).rejects.toThrow(NetworkError)
+      await expect(getAlphBalance(validAddress)).rejects.toThrow(
+        `Failed to fetch balance for address: ${validAddress}`
+      )
+    })
+
+    it('should include original error as cause in NetworkError', async () => {
+      const originalError = new Error('Connection refused')
+      mockGetBalance.mockRejectedValue(originalError)
+
+      try {
+        await getAlphBalance(validAddress)
+        fail('Expected NetworkError to be thrown')
+      } catch (error) {
+        expect(error).toBeInstanceOf(NetworkError)
+        expect((error as NetworkError).cause).toBe(originalError)
+      }
     })
   })
 })
