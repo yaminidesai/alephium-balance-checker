@@ -18,12 +18,31 @@ export interface Wallet {
 }
 
 /**
+ * Result returned when sendAlph is called with dryRun: true
+ */
+export interface DryRunResult {
+  txId: string
+  unsignedTx: string
+  senderAddress: string
+  destinationAddress: string
+  amount: string
+}
+
+/**
+ * Options for sendAlph function
+ */
+export interface SendAlphOptions {
+  dryRun?: boolean
+}
+
+/**
  * Send ALPH from one wallet to another on the Alephium testnet
  *
  * @param senderWallet - The wallet containing the sender's private key
  * @param destinationAddress - The recipient's Alephium address
  * @param amount - The amount to send in raw units (1 ALPH = 10^18 units)
- * @returns The transaction hash (txId)
+ * @param options - Optional settings (dryRun: boolean)
+ * @returns The transaction hash (txId) or DryRunResult if dryRun is true
  * @throws InvalidAmountError if the amount is zero or negative
  * @throws InvalidAddressError if the destination address is invalid
  * @throws TransactionError if the transaction fails to build, sign, or submit
@@ -31,8 +50,11 @@ export interface Wallet {
 export async function sendAlph(
   senderWallet: Wallet,
   destinationAddress: string,
-  amount: bigint
-): Promise<string> {
+  amount: bigint,
+  options?: SendAlphOptions
+): Promise<string | DryRunResult> {
+  const dryRun = options?.dryRun ?? false
+
   // Validate inputs before making any network calls
   if (amount <= 0n) {
     throw new InvalidAmountError('Amount must be greater than zero')
@@ -77,6 +99,17 @@ export async function sendAlph(
       'Failed to build transaction',
       error instanceof Error ? error : undefined
     )
+  }
+
+  // If dry run, return transaction details without submitting
+  if (dryRun) {
+    return {
+      txId: buildResult.txId,
+      unsignedTx: buildResult.unsignedTx,
+      senderAddress,
+      destinationAddress,
+      amount: amount.toString()
+    }
   }
 
   // Sign the transaction hash with the sender's private key

@@ -1,4 +1,4 @@
-import { sendAlph } from '../src/lib/send'
+import { sendAlph, DryRunResult } from '../src/lib/send'
 import { InvalidAddressError, InvalidAmountError, TransactionError } from '../src/lib/errors'
 import {
   NodeProvider,
@@ -424,6 +424,124 @@ describe('sendAlph', () => {
       expect(mockBuildTransferTx).not.toHaveBeenCalled()
       expect(mockSign).not.toHaveBeenCalled()
       expect(mockPostTransactionsSubmit).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('dry run mode', () => {
+    it('should build transaction but not submit when dryRun is true', async () => {
+      const result = await sendAlph(
+        { privateKey: mockPrivateKey },
+        mockDestinationAddress,
+        mockAmount,
+        { dryRun: true }
+      )
+
+      // Verify transaction was built
+      expect(mockBuildTransferTx).toHaveBeenCalled()
+
+      // Verify transaction was NOT signed or submitted
+      expect(mockSign).not.toHaveBeenCalled()
+      expect(mockPostTransactionsSubmit).not.toHaveBeenCalled()
+
+      // Verify result is DryRunResult
+      expect(typeof result).toBe('object')
+      expect((result as DryRunResult).txId).toBe(mockTxId)
+      expect((result as DryRunResult).unsignedTx).toBe(mockUnsignedTx)
+    })
+
+    it('should return correct transaction details in dry run mode', async () => {
+      const result = await sendAlph(
+        { privateKey: mockPrivateKey },
+        mockDestinationAddress,
+        mockAmount,
+        { dryRun: true }
+      ) as DryRunResult
+
+      expect(result.txId).toBe(mockTxId)
+      expect(result.unsignedTx).toBe(mockUnsignedTx)
+      expect(result.senderAddress).toBe(mockSenderAddress)
+      expect(result.destinationAddress).toBe(mockDestinationAddress)
+      expect(result.amount).toBe(mockAmount.toString())
+    })
+
+    it('should validate inputs even in dry run mode', async () => {
+      mockIsValidAddress.mockReturnValue(false)
+
+      await expect(
+        sendAlph(
+          { privateKey: mockPrivateKey },
+          'invalid-address',
+          mockAmount,
+          { dryRun: true }
+        )
+      ).rejects.toThrow(InvalidAddressError)
+
+      // Verify no transaction was built
+      expect(mockBuildTransferTx).not.toHaveBeenCalled()
+    })
+
+    it('should throw InvalidAmountError in dry run mode for invalid amount', async () => {
+      await expect(
+        sendAlph(
+          { privateKey: mockPrivateKey },
+          mockDestinationAddress,
+          BigInt(0),
+          { dryRun: true }
+        )
+      ).rejects.toThrow(InvalidAmountError)
+
+      // Verify no SDK functions were called
+      expect(mockBuildTransferTx).not.toHaveBeenCalled()
+    })
+
+    it('should throw TransactionError if build fails in dry run mode', async () => {
+      mockBuildTransferTx.mockRejectedValue(new Error('Build failed'))
+
+      await expect(
+        sendAlph(
+          { privateKey: mockPrivateKey },
+          mockDestinationAddress,
+          mockAmount,
+          { dryRun: true }
+        )
+      ).rejects.toThrow(TransactionError)
+
+      // Verify sign and submit were not called
+      expect(mockSign).not.toHaveBeenCalled()
+      expect(mockPostTransactionsSubmit).not.toHaveBeenCalled()
+    })
+
+    it('should submit transaction when dryRun is false (default)', async () => {
+      const result = await sendAlph(
+        { privateKey: mockPrivateKey },
+        mockDestinationAddress,
+        mockAmount,
+        { dryRun: false }
+      )
+
+      // Verify transaction was signed and submitted
+      expect(mockSign).toHaveBeenCalled()
+      expect(mockPostTransactionsSubmit).toHaveBeenCalled()
+
+      // Verify result is txId string
+      expect(typeof result).toBe('string')
+      expect(result).toBe(mockTxId)
+    })
+
+    it('should submit transaction when options is undefined', async () => {
+      const result = await sendAlph(
+        { privateKey: mockPrivateKey },
+        mockDestinationAddress,
+        mockAmount
+      )
+
+      // Verify transaction was signed and submitted
+      expect(mockSign).toHaveBeenCalled()
+      expect(mockPostTransactionsSubmit).toHaveBeenCalled()
+
+      // Verify result is txId string
+      expect(typeof result).toBe('string')
+      expect(result).toBe(mockTxId)
     })
   })
 })
