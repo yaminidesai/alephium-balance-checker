@@ -5,6 +5,7 @@ import {
   addressFromPublicKey,
   sign
 } from '@alephium/web3'
+import { validateAlephiumAddress } from './validation'
 
 const TESTNET_NODE_URL = 'https://node.testnet.alephium.org'
 
@@ -29,10 +30,12 @@ export async function sendAlph(
   destinationAddress: string,
   amount: bigint
 ): Promise<string> {
-  // Validate amount before making any network calls
+  // Validate inputs before making any network calls
   if (amount <= 0n) {
     throw new Error('Amount must be greater than zero')
   }
+
+  validateAlephiumAddress(destinationAddress, 'destination address')
 
   // Derive public key and address from the private key
   const publicKey = publicKeyFromPrivateKey(senderWallet.privateKey)
