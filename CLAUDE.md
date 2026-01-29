@@ -75,6 +75,44 @@ const txId = await sendAlph(wallet, 'destination-address', BigInt('1000000000000
 
 > **Warning:** The `sendAlph` function uses the Alephium testnet. Do not use mainnet private keys.
 
+## Error Classes
+
+**Location:** `src/lib/errors.ts`
+
+The library uses typed error classes for precise error handling. All errors extend the base `AlephiumError` class.
+
+| Error Class | When Thrown |
+|-------------|-------------|
+| `InvalidAddressError` | Address is empty, contains whitespace, or fails Alephium format validation |
+| `InvalidAmountError` | Amount is zero or negative |
+| `NetworkError` | API calls fail (balance fetch, connectivity issues) |
+| `TransactionError` | Transaction building, signing, or submission fails |
+
+**Usage:**
+```typescript
+import {
+  getAlphBalance,
+  InvalidAddressError,
+  NetworkError
+} from './lib'
+
+try {
+  const balance = await getAlphBalance(address)
+} catch (error) {
+  if (error instanceof InvalidAddressError) {
+    // Handle invalid address
+  } else if (error instanceof NetworkError) {
+    // Handle network failure
+    console.log(error.cause) // Original error preserved
+  }
+}
+```
+
+**Key Features:**
+- `NetworkError` and `TransactionError` preserve the original error in the `cause` property
+- All errors have descriptive messages suitable for logging
+- CLI scripts catch these errors and display user-friendly messages without stack traces
+
 ## CLI Usage
 
 ### Check Balance (Mainnet)
@@ -129,15 +167,20 @@ npx ts-node src/cli/send.ts <private-key> <destination-address> <amount-in-alph>
 # Output: Transaction hash and testnet explorer link
 ```
 
-### Error Handling
+### CLI Error Handling
 
-Both CLI scripts include validation and error handling:
+Both CLI scripts catch typed errors and display user-friendly messages:
+
+| Error Type | CLI Output |
+|------------|------------|
+| `InvalidAddressError` | `Invalid address: <message>` |
+| `InvalidAmountError` | `Invalid amount: <message>` |
+| `NetworkError` | `Network error: <message>` |
+| `TransactionError` | `Transaction failed: <message>` |
 
 - **Missing arguments** - Displays usage instructions with argument descriptions
-- **Invalid amount** - Rejects non-numeric, zero, or negative values with a clear error message
-- **Invalid private key** - Throws an error before making network calls
-- **Invalid address** - Propagates network error with descriptive message
-- **Network errors** - Displays the error message from the Alephium node
+- **Stack traces** - Never shown to users; only clean error messages are displayed
+- **Exit codes** - All errors exit with code 1
 
 ## Tests
 
@@ -145,16 +188,19 @@ Test files are located in `tests/` and use Jest with ts-jest. All tests mock ext
 
 ### Test Files
 
-**tests/balance.test.ts**
+**tests/balance.test.ts** (8 tests)
 - Valid address returns correct balance (mocked NodeProvider)
-- Invalid address throws appropriate error
+- Invalid address throws `InvalidAddressError`
+- Network failures throw `NetworkError` with original cause preserved
 
-**tests/send.test.ts**
+**tests/send.test.ts** (19 tests)
 - Successful transaction returns correct txId
 - Verifies correct parameters passed to NodeProvider, TransactionBuilder, and sign
-- Invalid private key throws error before network calls
-- Invalid destination address error propagates correctly
-- Zero/negative amount throws error before any network calls
+- Invalid private key throws `TransactionError`
+- Invalid destination address throws `InvalidAddressError`
+- Zero/negative amount throws `InvalidAmountError`
+- Build/sign/submit failures throw `TransactionError` with cause preserved
+- All validation errors verified to occur before network calls
 
 ### Running Tests
 
