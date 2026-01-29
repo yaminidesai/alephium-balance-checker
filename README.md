@@ -6,6 +6,7 @@ A TypeScript library and CLI for interacting with the [Alephium](https://alephiu
 
 - **Balance Checking** — Query ALPH balances for any address on mainnet
 - **Send ALPH** — Transfer tokens between wallets on testnet
+- **Dry-Run Mode** — Preview transactions before submitting
 - **TypeScript Support** — Fully typed API with exported interfaces
 - **CLI Tools** — Both TypeScript and Bash CLI wrappers included
 - **Comprehensive Tests** — Jest unit tests with mocked network calls
@@ -59,27 +60,51 @@ $ ./cli/balance.sh 1DrDyTr9RpRsQnDnXo2YRiPzPW4ooHX5LLoqXrqfMrpQH
 import { sendAlph, Wallet } from './src/lib'
 
 const wallet: Wallet = { privateKey: 'your-private-key-hex' }
+
+// Submit transaction
 const txId = await sendAlph(wallet, 'destination-address', BigInt('1000000000000000000'))
 console.log(`Transaction: ${txId}`)
+
+// Dry run (preview without submitting)
+const preview = await sendAlph(wallet, 'destination-address', BigInt('1000000000000000000'), { dryRun: true })
+console.log(`Preview TX ID: ${preview.txId}`)
 ```
 
 **TypeScript CLI:**
 ```bash
-npx ts-node src/cli/send.ts <private-key> <destination-address> <amount-in-alph>
+npx ts-node src/cli/send.ts <private-key> <destination-address> <amount-in-alph> [--dry-run]
 ```
 
 **Bash CLI:**
 ```bash
-./cli/send.sh <private-key> <destination-address> <amount-in-alph>
+./cli/send.sh <private-key> <destination-address> <amount-in-alph> [--dry-run]
 ```
 
-**Example:**
+**Example — Submit Transaction:**
 ```bash
 $ ./cli/send.sh abc123...def 1ABC...XYZ 0.5
 Sending 0.5 ALPH to 1ABC...XYZ...
 Transaction submitted successfully!
 Transaction hash: abc123...
 View on explorer: https://testnet.alephium.org/transactions/abc123...
+```
+
+**Example — Dry Run (Preview):**
+```bash
+$ ./cli/send.sh abc123...def 1ABC...XYZ 0.5 --dry-run
+[DRY RUN] Building transaction to send 0.5 ALPH to 1ABC...XYZ...
+
+=== DRY RUN RESULT ===
+Transaction built successfully (NOT submitted)
+
+Transaction Details:
+  From:        1Sender...
+  To:          1ABC...XYZ
+  Amount:      0.5 ALPH (500000000000000000 raw units)
+  TX ID:       abc123...
+  Unsigned TX: 00010203...
+
+To submit this transaction, run without --dry-run flag.
 ```
 
 ## Network Configuration
@@ -107,6 +132,7 @@ npx jest tests/balance.test.ts
 **Test Coverage:**
 - Balance checking with mocked responses
 - Transaction building and submission
+- Dry-run mode (build without submit)
 - Input validation (invalid addresses, amounts, keys)
 - Error propagation from network calls
 
@@ -130,17 +156,19 @@ export ALPH_PRIVATE_KEY="your-key"
 ```
 alephium-balance-checker/
 ├── src/
-│   ├── lib/           # Core library functions
-│   │   ├── balance.ts # getAlphBalance implementation
-│   │   ├── send.ts    # sendAlph implementation
-│   │   └── index.ts   # Public exports
-│   └── cli/           # TypeScript CLI entry points
+│   ├── lib/             # Core library functions
+│   │   ├── balance.ts   # getAlphBalance implementation
+│   │   ├── send.ts      # sendAlph implementation
+│   │   ├── errors.ts    # Typed error classes
+│   │   ├── validation.ts # Address validation
+│   │   └── index.ts     # Public exports
+│   └── cli/             # TypeScript CLI entry points
 │       ├── balance.ts
 │       └── send.ts
-├── cli/               # Bash CLI wrappers
+├── cli/                 # Bash CLI wrappers
 │   ├── balance.sh
 │   └── send.sh
-├── tests/             # Jest unit tests
+├── tests/               # Jest unit tests
 │   ├── balance.test.ts
 │   └── send.test.ts
 ├── package.json
