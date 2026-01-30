@@ -7,8 +7,7 @@ import {
 } from '@alephium/web3'
 import { validateAlephiumAddress } from './validation'
 import { InvalidAmountError, TransactionError } from './errors'
-
-const TESTNET_NODE_URL = 'https://node.testnet.alephium.org'
+import { getTestnetNodeUrl } from './config'
 
 /**
  * Wallet interface containing the private key for signing transactions
@@ -76,7 +75,7 @@ export async function sendAlph(
   }
 
   // Create node provider and transaction builder for testnet
-  const nodeProvider = new NodeProvider(TESTNET_NODE_URL)
+  const nodeProvider = new NodeProvider(getTestnetNodeUrl())
   const txBuilder = TransactionBuilder.from(nodeProvider)
 
   // Build the unsigned transfer transaction

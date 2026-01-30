@@ -1,8 +1,7 @@
 import { NodeProvider } from '@alephium/web3'
 import { validateAlephiumAddress } from './validation'
 import { NetworkError } from './errors'
-
-const MAINNET_NODE_URL = 'https://node.mainnet.alephium.org'
+import { getMainnetNodeUrl } from './config'
 
 /**
  * Get the ALPH balance for an address on Alephium mainnet
@@ -14,7 +13,7 @@ const MAINNET_NODE_URL = 'https://node.mainnet.alephium.org'
 export async function getAlphBalance(address: string): Promise<bigint> {
   validateAlephiumAddress(address)
 
-  const nodeProvider = new NodeProvider(MAINNET_NODE_URL)
+  const nodeProvider = new NodeProvider(getMainnetNodeUrl())
 
   try {
     const result = await nodeProvider.addresses.getAddressesAddressBalance(address)
